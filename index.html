@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <style></style>
+</head>
+
+<body>
+    <button id="group1">Split By Vaccination Status (3 Groups)</button>
+    <button id="group2">Cluster Into One</button>
+    <svg viewBox="0 0 800 800"></svg>
+    <div class="tooltip"></div>
+    <script src="./index_files/d3.v7.min.js.download"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.13.0/d3-legend.js"></script>
+
+    <script>
+
+        let width = 800, height = 800;
+
+        let svg = d3.select("svg")
+            .attr("viewBox", "0 0 " + width + " " + height)
+
+        // Load external data
+        Promise.all([d3.json("links-sample.json"), d3.json("cases-sample.json")]).then(data => {
+
+            // Data preprocessing
+            data[0].forEach(e => {
+                e.source = e.infector;
+                e.target = e.infectee;
+            });
+
+            // console.log(data[0]); //links
+            // console.log(data[1]); //cases
+
+            // Split between non-vaccinated and vaccinated
+            data[1].forEach(d => {
+                if (d.vaccinated === "no") {
+                    d.class = 0
+                }
+                else if (d.vaccinated === "partial (1 dose)") {
+                    d.class = 1
+                }
+                else {
+                    d.class = 2
+                }
+            })
+
+            let colorScale = d3.scaleOrdinal()
+                .domain([0, 1])
+                .range(["blue", "pink"]);
+
+
+            let colorScaleTwo = d3.scaleOrdinal()
+                .domain(["Male", "Female"])
+                .range(["blue", "pink"]);
+
+
+            let linkpath = svg.append("g")
+                .attr("id", "links")
+                .selectAll("path")
+                .data(data[0])
+                .enter()
+                .append("path")
+                .attr("fill", "none")
+                .attr("stroke", "black");
+
+            let node = svg.append("g")
+                .attr("id", "nodes")
+                .selectAll("circle")
+                .data(data[1])
+                .enter()
+                .append("circle")
+                .style("fill", d => { if (d.gender == 'male') { return colorScale(0) } else { return colorScale(1) } })
+                .attr("r", 15)
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended))
+                .on("mouseover", (event, d) => {
+                    d3.select(".tooltip")
+                        .html("VACCINATION STATUS: " + d.vaccinated.toUpperCase() + "<br>GENDER: " + d.gender.toUpperCase() + "<br>" + "AGE: " + d.age + "<br>NATIONALITY: " + d.nationality.toUpperCase() + "<br>OCCUPATION: " + d.occupation.toUpperCase() + "<br>ORGANISATION: " + d.organization.toUpperCase())
+                        .style("left", (event.pageX + 50) + "px")
+                        .style("top", (event.pageY + 50) + "px")
+                        .style("position", "absolute")
+                        .style("border", "solid")
+                        .style("background", "white")
+                        .style("padding", "10px")
+                        .style("opacity", 1);
+
+                    let path = d3.select(event.currentTarget)
+                    path.style("stroke", "orange").style("stroke-width", 2);
+                })
+                .on("mouseout", (event, d) => {
+                    d3.select(".tooltip")
+                        .text("")
+                        .style("opacity", 0);
+
+                    let path = d3.select(event.currentTarget)
+                    path.style("stroke", "#fff").style("stroke-width", 2);
+                })
+
+
+            let xPosition = d3.scaleOrdinal()
+                .domain([0, 1, 2])
+                .range([50, 270, 700]);
+
+            let simulation = d3.forceSimulation()
+                .nodes(data[1])
+                .force("x", d3.forceX().strength(0.5).x(d => xPosition(d.class)))
+                .force("y", d3.forceY().strength(0.01).y(height / 3))
+                .force("link", d3.forceLink(data[0])
+                    .id(d => d.id)
+                    .distance(100)
+                    .strength(0.5))
+                .force("charge", d3.forceManyBody().strength(5))
+                .force("collide", d3.forceCollide().strength(1.1).radius(15))
+                .on("tick", d => {
+                    node
+                        .attr("transform", function (d) {
+                            return "translate(" + d.x + "," + d.y + ")";
+                        })
+
+                    linkpath
+                        .attr("d", d => "M" + d.source.x + "," + d.source.y + " " + d.target.x + "," + d.target.y);
+                });
+
+            d3.select("#group1").on("click", function () {
+                simulation
+                    .force("x", d3.forceX().strength(0.5).x(d => xPosition(d.class)))
+                    .force("y", d3.forceY().strength(0.2).y(height / 5))
+                    .alphaTarget(0.3)
+                    .restart();
+            })
+
+            d3.select("#group2").on("click", function () {
+                simulation
+                    .force("x", d3.forceX().strength(0.1).x(400))
+                    .force("y", d3.forceY().strength(0.1).y(200))
+                    .alphaTarget(0.3)
+                    .restart();
+            })
+
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+
+            var legend = d3.legendColor()
+                .scale(colorScaleTwo)
+                .shapeWidth(30)
+                .title("Legend (Gender)")
+
+
+            svg.append("g")
+                .style("font-size", "11px")
+                .attr("transform", "translate(10,310)")
+                .call(legend)
+
+        })
+    </script>
+
+
+</body>
+
+</html>
